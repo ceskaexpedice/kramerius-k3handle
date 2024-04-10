@@ -23,7 +23,7 @@ idea {
 
 
 group = "cz.inovatika"
-version = "1.0.0"
+version = "1.1.0"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_21
@@ -86,7 +86,7 @@ tasks {
 jib {
     from {
         image = "eclipse-temurin:21-jre-alpine"
-        platforms {
+       platforms {
             platform {
                 architecture = "amd64"
                 os = "linux"

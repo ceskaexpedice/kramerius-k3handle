@@ -2,6 +2,7 @@ package cz.inovatika.k3handle;
 
 import cz.incad.kramerius.utils.conf.KConfiguration;
 import io.javalin.http.Context;
+import io.javalin.http.HttpStatus;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
@@ -30,7 +31,7 @@ public class Resolver {
         }
     }
 
-    public static String resolve(Context ctx) throws IOException {
+    public static void resolve(Context ctx) throws IOException {
         String fullPath = ctx.fullUrl();
         String handlePrefix = KConfiguration.getInstance().getConfiguration().getString("k3handle.handlePrefix", "handle/");
         int handleIndex = fullPath.lastIndexOf(handlePrefix);
@@ -38,10 +39,12 @@ public class Resolver {
         Query query = new TermQuery(new Term("handle", new BytesRef(handle)));
         ScoreDoc[] hits = searcher.search(query, 1).scoreDocs;
         for (ScoreDoc hit : hits) {
-            Document doc = searcher.doc(hit.doc);
+            Document doc = searcher.storedFields().document(hit.doc);
             String base = KConfiguration.getInstance().getConfiguration().getString("k3handle.redirectBase", "https://k7.inovatika.dev/uuid/");
-            return base + doc.get("pid");
+            ctx.redirect( base + doc.get("pid"));
+            return;
         }
-        return "handle_"+handle+"_not_found";
+        ctx.status(HttpStatus.NOT_FOUND);
+        ctx.result("Handle Not Found");
     }
 }

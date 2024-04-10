@@ -9,7 +9,7 @@ public class Main {
             Indexer.index();
         }
         Javalin.create()
-                .get("/*", ctx -> ctx.redirect(Resolver.resolve(ctx)))
+                .get("/*", Resolver::resolve)
                 .start(8080);
     }
 }

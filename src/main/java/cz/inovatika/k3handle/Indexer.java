@@ -26,6 +26,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -34,6 +35,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Stream;
 
 
 public class Indexer {
@@ -72,19 +74,21 @@ public class Indexer {
         Path objectStoreRoot = Paths.get(objectPaths);
         try (IndexWriter indexWriter = new IndexWriter(index, config)) {
             final AtomicInteger currentIteration = new AtomicInteger(0);
-            Files.walk(objectStoreRoot).parallel().filter(Files::isRegularFile).forEach(path -> {
-                try {
-                    if ((currentIteration.incrementAndGet() % LOG_MESSAGE_ITERATION) == 0) {
-                        LOGGER.info("Indexed " + currentIteration + " items.");
-                    }
-                    FileInputStream inputStream = new FileInputStream(path.toFile());
-                    DigitalObject digitalObject = createDigitalObject(inputStream);
-                    rebuildProcessingIndex(indexWriter, digitalObject);
+            try (Stream<Path> stream = Files.walk(objectStoreRoot)) {
+                stream.parallel().filter(Files::isRegularFile).forEach(path -> {
+                    try {
+                        if ((currentIteration.incrementAndGet() % LOG_MESSAGE_ITERATION) == 0) {
+                            LOGGER.info("Indexed " + currentIteration + " items.");
+                        }
+                        FileInputStream inputStream = new FileInputStream(path.toFile());
+                        DigitalObject digitalObject = createDigitalObject(inputStream);
+                        rebuildProcessingIndex(indexWriter, digitalObject);
 
-                } catch (Exception ex) {
-                    LOGGER.log(Level.SEVERE, "Error processing file: " + path, ex);
-                }
-            });
+                    } catch (Exception ex) {
+                        LOGGER.log(Level.SEVERE, "Error processing file: " + path, ex);
+                    }
+                });
+            }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -96,12 +100,12 @@ public class Indexer {
         }
     }
 
-    private static Unmarshaller unmarshaller = null;
+    private static final Unmarshaller unmarshaller = initJAXB();
 
-    static {
+    private static Unmarshaller initJAXB(){
         try {
             JAXBContext jaxbContext = JAXBContext.newInstance(DigitalObject.class);
-            unmarshaller = jaxbContext.createUnmarshaller();
+            return jaxbContext.createUnmarshaller();
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Cannot init JAXB", e);
             throw new RuntimeException(e);
@@ -114,7 +118,7 @@ public class Indexer {
             for (DatastreamType datastreamType : datastreamList) {
                 if (FedoraUtils.RELS_EXT_STREAM.equals(datastreamType.getID())) {
                     InputStream streamContent = AkubraUtils.getStreamContent(AkubraUtils.getLastStreamVersion(datastreamType), null);
-                    String relsExt = IOUtils.toString(streamContent, "UTF-8");
+                    String relsExt = IOUtils.toString(streamContent, StandardCharsets.UTF_8);
                     String handle = getHandleFromRelsExt(relsExt);
                     if (handle != null) {
                         String pid = digitalObject.getPID();
@@ -131,7 +135,7 @@ public class Indexer {
 
     }
 
-    private static String getHandleFromRelsExt(String relsExt) throws IOException, SAXException, ParserConfigurationException, RepositoryException {
+    private static String getHandleFromRelsExt(String relsExt) throws IOException, SAXException, ParserConfigurationException {
         Document document = XMLUtils.parseDocument(new StringReader(relsExt), true);
         Element handle = XMLUtils.findElement(document.getDocumentElement(), "handle", "http://www.nsdl.org/ontologies/relationships#");
         return handle != null ? handle.getTextContent() : null;
